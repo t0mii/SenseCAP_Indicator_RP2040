@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <SensirionI2CSgp40.h>
-#include <SensirionI2CScd4x.h>
+#include <SensirionI2cScd4x.h>
 #include <VOCGasIndexAlgorithm.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -25,7 +25,7 @@
 
 AHT20 AHT;
 SensirionI2CSgp40 sgp40;
-SensirionI2CScd4x scd4x;
+SensirionI2cScd4x scd4x;
 VOCGasIndexAlgorithm voc_algorithm;
 
 PacketSerial myPacketSerial;
@@ -228,7 +228,7 @@ void sensor_scd4x_init(void) {
   uint16_t error;
   char errorMessage[256];
 
-  scd4x.begin(Wire);
+  scd4x.begin(Wire, 0x62);
 
   // stop potentially previously started measurement
   error = scd4x.stopPeriodicMeasurement();
@@ -238,16 +238,16 @@ void sensor_scd4x_init(void) {
     Serial.println(errorMessage);
   }
 
-  uint16_t serial0;
-  uint16_t serial1;
-  uint16_t serial2;
-  error = scd4x.getSerialNumber(serial0, serial1, serial2);
+  uint64_t serialNumber;
+  error = scd4x.getSerialNumber(serialNumber);
   if (error) {
     Serial.print("Error trying to execute getSerialNumber(): ");
     errorToString(error, errorMessage, 256);
     Serial.println(errorMessage);
   } else {
-    printSerialNumber(serial0, serial1, serial2);
+    Serial.print("Serial number: ");
+    Serial.println((uint32_t)(serialNumber >> 32), HEX);
+    Serial.println((uint32_t)(serialNumber & 0xFFFFFFFF), HEX);
   }
 
   // Start Measurement
