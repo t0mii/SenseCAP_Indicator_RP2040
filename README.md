@@ -42,7 +42,7 @@ To search it in Arduino IDE, you can click `Tools` -> `Manage Libraries...` and 
 |Sensirion Arduino Core library|0.6.0|Sensirion Core|
 |Serial communication protocol|1.4.0|PacketSerial|
 |SGP40 TVOC sensor library|0.1.0|Sensirion I2C SGP40|
-|SCD41 CO2 sensor library|0.4.0|Sensirion I2C SCD4x|
+|SCD41 CO2 sensor library|1.1.0|Sensirion I2C SCD4x|
 |Transfer index library: Sensirion Gas Index Algorithm|3.2.2|Sensirion Gas Index Algorithm|
 |AHT20 temperature and humidity sensor libray|1.0.1|Seeed_Arduino_AHT20|
 
