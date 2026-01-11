@@ -7,6 +7,8 @@
 #include <SD.h>
 #include <PacketSerial.h>
 #include "AHT20.h"
+#include <Multichannel_Gas_GMXXX.h>
+#include "Seeed_HM330X.h"
 
 #define DEBUG 0
 
@@ -32,6 +34,14 @@ PacketSerial myPacketSerial;
 
 String SDDataString = "";
 
+// NEW Grove I2C sensors
+HM330X hm3301;
+uint8_t hm_buf[29];
+GAS_GMXXX<TwoWire> gas;
+
+static bool hm3301_ready = false;
+static bool gas_ready = false;
+
 
 //Type of transfer packet
 
@@ -39,9 +49,19 @@ String SDDataString = "";
 #define PKT_TYPE_SENSOR_SHT41_TEMP 0XB3
 #define PKT_TYPE_SENSOR_SHT41_HUMIDITY 0XB4
 #define PKT_TYPE_SENSOR_TVOC_INDEX 0XB5
+#define PKT_TYPE_SENSOR_PM1_0  0xB6
+#define PKT_TYPE_SENSOR_PM2_5  0xB7
+#define PKT_TYPE_SENSOR_PM10   0xB8
+#define PKT_TYPE_SENSOR_GM102B 0xB9
+#define PKT_TYPE_SENSOR_GM302B 0xBA
+#define PKT_TYPE_SENSOR_GM502B 0xBB
+#define PKT_TYPE_SENSOR_GM702B 0xBC
+#define PKT_TYPE_SENSOR_EXT_TEMP     0xBD
+#define PKT_TYPE_SENSOR_EXT_HUMIDITY 0xBE
 #define PKT_TYPE_CMD_COLLECT_INTERVAL 0xA0
 #define PKT_TYPE_CMD_BEEP_ON 0xA1
 #define PKT_TYPE_CMD_SHUTDOWN 0xA3
+
 
 
 
@@ -83,28 +103,43 @@ void printSerialNumber(uint16_t serial0, uint16_t serial1, uint16_t serial2) {
   Serial.println();
 }
 
+
+static inline bool i2c_ping(uint8_t addr) {
+  Wire.beginTransmission(addr);
+  return (Wire.endTransmission() == 0);
+}
+
+static inline bool hm3301_checksum_ok(const uint8_t *data29) {
+  // Simple checksum used in Seeed examples: sum of first 28 bytes equals byte 28
+  uint8_t sum = 0;
+  for (int i = 0; i < 28; i++) sum += data29[i];
+  return (sum == data29[28]);
+}
+
 void sensor_power_on(void) {
+
   pinMode(18, OUTPUT);
   digitalWrite(18, HIGH);
 }
 
 void sensor_power_off(void) {
+
   pinMode(18, OUTPUT);
   digitalWrite(18, LOW);
 }
 
-
-float temperature = 0.0;
-float humidity = 0.0;
+float temperature = 0;
+float humidity = 0;
 
 uint16_t defaultCompenstaionRh = 0x8000;
 uint16_t defaultCompenstaionT = 0x6666;
 
+
 uint16_t compensationRh = defaultCompenstaionRh;
 uint16_t compensationT = defaultCompenstaionT;
 
-/************************ aht  temp & humidity ****************************/
 
+//aht20: extern temp / humidity sensor
 void sensor_aht_init(void) {
   AHT.begin();
 }
@@ -116,7 +151,7 @@ void sensor_aht_get(void) {
   int ret = AHT.getSensor(&humi, &temp);
   if (ret)  // GET DATA OK
   {
-    Serial.print("humidity: ");
+    Serial.print("sensor aht20 (external): humidity: ");
     Serial.print(humi * 100);
     Serial.print("%\t temerature: ");
     Serial.println(temp);
@@ -131,21 +166,20 @@ void sensor_aht_get(void) {
     compensationT = defaultCompenstaionT;
   }
 
-  SDDataString += "aht20,";
+  SDDataString += "aht20_ext,";
   if (ret) {
     SDDataString += String(temperature);
     SDDataString += ',';
     SDDataString += String(humidity);
     SDDataString += ',';
 
-    sensor_data_send(PKT_TYPE_SENSOR_SHT41_TEMP, temperature);
-    sensor_data_send(PKT_TYPE_SENSOR_SHT41_HUMIDITY, humidity);
+    // external values use new packet types
+    sensor_data_send(PKT_TYPE_SENSOR_EXT_TEMP, temperature);
+    sensor_data_send(PKT_TYPE_SENSOR_EXT_HUMIDITY, humidity);
   } else {
     SDDataString += "-,-,";
   }
 }
-
-/************************ sgp40 tvoc  ****************************/
 
 void sensor_sgp40_init(void) {
   uint16_t error;
@@ -190,8 +224,6 @@ void sensor_sgp40_init(void) {
 void sensor_sgp40_get(void) {
   uint16_t error;
   char errorMessage[256];
-  uint16_t defaultRh = 0x8000;
-  uint16_t defaultT = 0x6666;
   uint16_t srawVoc = 0;
 
   Serial.print("sensor sgp40: ");
@@ -222,7 +254,125 @@ void sensor_sgp40_get(void) {
 }
 
 
-/************************ scd4x  co2 ****************************/
+// -------------------- NEW: HM3301 / HM330X (PM) --------------------
+void sensor_hm3301_init(void) {
+  // HM3301 / HM330X is typically at 0x40
+  if (!i2c_ping(0x40)) {
+    Serial.println("HM3301 not found on I2C (0x40)");
+    hm3301_ready = false;
+    return;
+  }
+  // hm3301.init() returns 0 on success in Seeed examples
+  if (hm3301.init()) {
+    Serial.println("HM3301 init failed");
+    hm3301_ready = false;
+    return;
+  }
+  hm3301_ready = true;
+  Serial.println("HM3301 ready (0x40)");
+}
+
+void sensor_hm3301_get(void) {
+  Serial.print("sensor hm3301: ");
+
+  SDDataString += "hm3301,";
+  if (!hm3301_ready) {
+    Serial.println("not ready");
+    SDDataString += "-,-,-,";
+    return;
+  }
+
+  // hm3301.read_sensor_value() returns 0 on success in Seeed examples
+  if (hm3301.read_sensor_value(hm_buf, 29)) {
+    Serial.println("read fail");
+    SDDataString += "-,-,-,";
+    return;
+  }
+
+  // Optional checksum guard (avoid sending garbage)
+  if (!hm3301_checksum_ok(hm_buf)) {
+    Serial.println("checksum fail");
+    SDDataString += "-,-,-,";
+    return;
+  }
+
+  // Atmospheric mapping (big-endian):
+  // pm1  = buf[10..11], pm2.5 = buf[12..13], pm10 = buf[14..15]
+  uint16_t pm1  = (uint16_t(hm_buf[10]) << 8) | hm_buf[11];
+  uint16_t pm25 = (uint16_t(hm_buf[12]) << 8) | hm_buf[13];
+  uint16_t pm10 = (uint16_t(hm_buf[14]) << 8) | hm_buf[15];
+
+  Serial.print("PM1.0=");
+  Serial.print(pm1);
+  Serial.print(" PM2.5=");
+  Serial.print(pm25);
+  Serial.print(" PM10=");
+  Serial.println(pm10);
+
+  SDDataString += String(pm1);
+  SDDataString += ',';
+  SDDataString += String(pm25);
+  SDDataString += ',';
+  SDDataString += String(pm10);
+  SDDataString += ',';
+
+  sensor_data_send(PKT_TYPE_SENSOR_PM1_0, (float)pm1);
+  sensor_data_send(PKT_TYPE_SENSOR_PM2_5, (float)pm25);
+  sensor_data_send(PKT_TYPE_SENSOR_PM10, (float)pm10);
+}
+
+// -------------------- NEW: Seeed MultiGas v2 (GMXXX) --------------------
+void sensor_multigas_init(void) {
+  if (!i2c_ping(0x08)) {
+    Serial.println("MultiGas v2 not found on I2C (0x08)");
+    gas_ready = false;
+    return;
+  }
+  gas.begin(Wire, 0x08);
+  gas_ready = true;
+  Serial.println("MultiGas v2 ready (0x08)");
+}
+
+void sensor_multigas_get(void) {
+  Serial.print("sensor multigas: ");
+
+  SDDataString += "multigas,";
+  if (!gas_ready) {
+    Serial.println("not ready");
+    SDDataString += "-,-,-,-,";
+    return;
+  }
+
+  // Library returns unsigned int; send as float as requested
+  unsigned int gm102b = gas.getGM102B();
+  unsigned int gm302b = gas.getGM302B();
+  unsigned int gm502b = gas.getGM502B();
+  unsigned int gm702b = gas.getGM702B();
+
+  Serial.print("GM102B=");
+  Serial.print(gm102b);
+  Serial.print(" GM302B=");
+  Serial.print(gm302b);
+  Serial.print(" GM502B=");
+  Serial.print(gm502b);
+  Serial.print(" GM702B=");
+  Serial.println(gm702b);
+
+  SDDataString += String(gm102b);
+  SDDataString += ',';
+  SDDataString += String(gm302b);
+  SDDataString += ',';
+  SDDataString += String(gm502b);
+  SDDataString += ',';
+  SDDataString += String(gm702b);
+  SDDataString += ',';
+
+  sensor_data_send(PKT_TYPE_SENSOR_GM102B, (float)gm102b);
+  sensor_data_send(PKT_TYPE_SENSOR_GM302B, (float)gm302b);
+  sensor_data_send(PKT_TYPE_SENSOR_GM502B, (float)gm502b);
+  sensor_data_send(PKT_TYPE_SENSOR_GM702B, (float)gm702b);
+}
+
 
 void sensor_scd4x_init(void) {
   uint16_t error;
@@ -257,7 +407,6 @@ void sensor_scd4x_init(void) {
     errorToString(error, errorMessage, 256);
     Serial.println(errorMessage);
   }
-  // scd4x.powerDown();
 }
 
 void sensor_scd4x_get(void) {
@@ -265,6 +414,7 @@ void sensor_scd4x_get(void) {
   char errorMessage[256];
 
   Serial.print("sensor scd4x: ");
+  Serial.print("[internal] ");
   // Read Measurement
   uint16_t co2;
   float temperature;
@@ -299,13 +449,18 @@ void sensor_scd4x_get(void) {
     SDDataString += ',';
 
 
-    sensor_data_send(PKT_TYPE_SENSOR_SCD41_CO2, (float)co2);  //todo
+    sensor_data_send(PKT_TYPE_SENSOR_SCD41_CO2, (float)co2);
+
+    // internal temperature/humidity are from SCD4x
+    sensor_data_send(PKT_TYPE_SENSOR_SHT41_TEMP, temperature);
+    sensor_data_send(PKT_TYPE_SENSOR_SHT41_HUMIDITY, humidity);
   }
 }
 
-/************************ beep ****************************/
 
-#define Buzzer 19  //Buzzer GPIO
+
+//Buzzer
+#define Buzzer 19 //Buzzer GPIO
 
 void beep_init(void) {
   pinMode(Buzzer, OUTPUT);
@@ -319,10 +474,6 @@ void beep_on(void) {
   analogWrite(Buzzer, 0);
 }
 
-
-
-/************************ grove  ****************************/
-
 void grove_adc_get(void) {
   String dataString = "";
   int adc0 = analogRead(26);
@@ -335,9 +486,9 @@ void grove_adc_get(void) {
 }
 
 
-/************************ recv cmd from esp32  ****************************/
 
-static bool shutdown_flag = false;
+// recv cmd from esp32
+bool shutdown_flag = false;
 
 void onPacketReceived(const uint8_t *buffer, size_t size) {
 
@@ -348,9 +499,7 @@ void onPacketReceived(const uint8_t *buffer, size_t size) {
   }
   Serial.println("");
 #endif
-  if (size < 1) {
-    return;
-  }
+
   switch (buffer[0]) {
     case PKT_TYPE_CMD_SHUTDOWN:
       {
@@ -363,8 +512,6 @@ void onPacketReceived(const uint8_t *buffer, size_t size) {
       break;
   }
 }
-
-/************************ setuo & loop ****************************/
 
 int cnt = 0;
 int i = 0;
@@ -384,6 +531,10 @@ void setup() {
   Wire.setSDA(20);
   Wire.setSCL(21);
   Wire.begin();
+
+  // NEW Grove I2C sensors
+  sensor_multigas_init();
+  sensor_hm3301_init();
 
   const int chipSelect = 13;
   SPI1.setSCK(10);
@@ -433,6 +584,7 @@ void setup() {
   Serial.printf(SENSECAP, VERSION);
 }
 
+
 void loop() {
   if (i > 500) {
     i = 0;
@@ -446,6 +598,8 @@ void loop() {
     cnt++;
     sensor_aht_get();
     sensor_sgp40_get();
+    sensor_hm3301_get();
+    sensor_multigas_get();
     sensor_scd4x_get();
     grove_adc_get();
 
@@ -459,6 +613,7 @@ void loop() {
         Serial.print("sd write: ");
         Serial.println(SDDataString);
       } else {
+        // if the file isn't open, pop up an error:
         Serial.println("error opening datalog.txt");
       }
     }
@@ -475,3 +630,4 @@ void loop() {
   //    delay(10);
   // }
 }
+
