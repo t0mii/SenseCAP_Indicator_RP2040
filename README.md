@@ -2,6 +2,19 @@
 
 Arduino firmware for the RP2040 coprocessor on the SenseCAP Indicator D1S with extended Grove sensor support.
 
+> **Blog Post:** [Building an Advanced Air Quality Monitor with AI-Assisted Programming](https://postl.ai/2026/01/11/building-a-advanced-air-quality-monitor-with-ai-assisted-programming/)
+
+## Photos
+
+### Device with Sensors
+![Device with Sensors](images/device-with-sensors.jpg)
+
+### Sensor UI
+![Sensor UI](images/sensor-ui.jpg)
+
+### MariaDB Export Settings
+![MariaDB Export](images/mariadb-export.jpg)
+
 ## Supported Sensors
 
 ### Built-in Sensors
@@ -107,3 +120,8 @@ This RP2040 firmware works together with the ESP32 firmware:
 ## License
 
 Based on original [SenseCAP Indicator RP2040](https://github.com/Seeed-Solution/SenseCAP_Indicator_RP2040) by Seeed Studio.
+
+## Credits
+
+- Original firmware: [Seeed Studio](https://www.seeedstudio.com/)
+- Extended sensor support: AI-assisted development with [Claude](https://claude.ai)
