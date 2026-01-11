@@ -19,6 +19,65 @@ Arduino firmware for the RP2040 coprocessor on the SenseCAP Indicator D1S with e
 
 Connect Grove sensors to the I2C Grove port on the SenseCAP Indicator. All sensors share the same I2C bus (SDA: GPIO20, SCL: GPIO21).
 
+## Building & Flashing
+
+### Option 1: Arduino IDE
+
+1. **Install Arduino IDE** (2.x recommended)
+
+2. **Add RP2040 Board Support:**
+   - Go to `File` → `Preferences`
+   - Add to "Additional Board Manager URLs":
+     ```
+     https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+     ```
+   - Go to `Tools` → `Board` → `Board Manager`
+   - Search for "pico" and install **"Raspberry Pi Pico/RP2040"**
+
+3. **Install Required Libraries** (`Tools` → `Manage Libraries`):
+   - `Sensirion I2C SGP40`
+   - `Sensirion I2C SCD4x`
+   - `Sensirion Gas Index Algorithm`
+   - `PacketSerial`
+   - `Grove - Multichannel Gas Sensor V2` (by Seeed)
+   - `Grove - Laser PM2.5 HM3301` (by Seeed)
+   - `AHT20` (by Seeed or compatible)
+
+4. **Select Board:**
+   - `Tools` → `Board` → `Raspberry Pi Pico/RP2040` → **"Raspberry Pi Pico"**
+
+5. **Flash:**
+   - Hold **BOOTSEL** button on the SenseCAP Indicator RP2040
+   - Connect USB while holding the button
+   - Select the USB drive that appears as port
+   - Click **Upload**
+
+### Option 2: arduino-cli
+
+```bash
+# Install board support
+arduino-cli core install rp2040:rp2040 --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+
+# Install libraries
+arduino-cli lib install "Sensirion I2C SGP40"
+arduino-cli lib install "Sensirion I2C SCD4x"
+arduino-cli lib install "Sensirion Gas Index Algorithm"
+arduino-cli lib install "PacketSerial"
+
+# Compile
+arduino-cli compile --fqbn rp2040:rp2040:rpipico indicator_rp2040.ino
+
+# Upload (hold BOOTSEL, connect USB first)
+arduino-cli upload --fqbn rp2040:rp2040:rpipico -p /dev/ttyACM0 indicator_rp2040.ino
+```
+
+### Option 3: UF2 File
+
+1. Compile using Arduino IDE or arduino-cli
+2. Find the `.uf2` file in the build output
+3. Hold **BOOTSEL** button, connect USB
+4. Drag & drop the `.uf2` file to the mounted `RPI-RP2` drive
+
 ## Communication Protocol
 
 Sensor data is sent to the ESP32 via UART using COBS (Consistent Overhead Byte Stuffing) encoding.
@@ -40,26 +99,10 @@ Sensor data is sent to the ESP32 via UART using COBS (Consistent Overhead Byte S
 | External Temp | 0xBD | float |
 | External Humidity | 0xBE | float |
 
-## Building
+## ESP32 Companion Firmware
 
-### Requirements
-- Arduino IDE or arduino-cli
-- Board: Raspberry Pi Pico (RP2040)
-- Libraries:
-  - Sensirion I2C SGP40
-  - Sensirion I2C SCD4x
-  - Sensirion Gas Index Algorithm
-  - Seeed Grove HM330X
-  - Seeed Multichannel Gas Sensor V2
-  - AHT20
-  - PacketSerial
-
-### Flashing
-1. Hold BOOTSEL button on RP2040
-2. Connect USB
-3. Copy `.uf2` file to the mounted drive
-
-Or use Arduino IDE to upload directly.
+This RP2040 firmware works together with the ESP32 firmware:
+- Repository: [SenseCAP_Indicator_ESP32](https://github.com/t0mii/SenseCAP_Indicator_ESP32)
 
 ## License
 
