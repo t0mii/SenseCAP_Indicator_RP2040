@@ -57,7 +57,7 @@ Connect Grove sensors to the I2C Grove port on the SenseCAP Indicator. All senso
    - `AHT20` (by Seeed or compatible)
 
 4. **Select Board:**
-   - `Tools` → `Board` → `Raspberry Pi Pico/RP2040` → **"Raspberry Pi Pico"**
+   - `Tools` → `Board` → `Raspberry Pi Pico/RP2040` → **"Seeed INDICATOR RP2040"**
 
 5. **Flash:**
    - Hold **BOOTSEL** button on the SenseCAP Indicator RP2040
@@ -77,11 +77,13 @@ arduino-cli lib install "Sensirion I2C SCD4x"
 arduino-cli lib install "Sensirion Gas Index Algorithm"
 arduino-cli lib install "PacketSerial"
 
-# Compile
-arduino-cli compile --fqbn rp2040:rp2040:rpipico indicator_rp2040.ino
+# Compile (IMPORTANT: use seeed_indicator_rp2040, not rpipico!)
+arduino-cli compile --fqbn rp2040:rp2040:seeed_indicator_rp2040 SenseCAP_Indicator_RP2040.ino
 
-# Upload (hold BOOTSEL, connect USB first)
-arduino-cli upload --fqbn rp2040:rp2040:rpipico -p /dev/ttyACM0 indicator_rp2040.ino
+# Flash via UF2 (recommended):
+# 1. Hold BOOTSEL button, connect USB
+# 2. Copy the .uf2 file to the mounted RPI-RP2 drive:
+cp ~/.cache/arduino/sketches/*/SenseCAP_Indicator_RP2040.ino.uf2 /run/media/$USER/RPI-RP2/
 ```
 
 ### Option 3: UF2 File
